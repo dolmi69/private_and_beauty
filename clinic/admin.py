@@ -46,6 +46,7 @@ class UserProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
+    change_list_template = "admin/clinic/appointment/change_list.html"
     list_display = ["id", "client_name", "service", "doctor", "requested_at", "status"]
     list_display_links = ["id", "client_name"]
     list_editable = ["status"]

@@ -179,7 +179,7 @@ class BeautyTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("12:00", response.json()["reply"])
         self.assertEqual(response.json()["facts"]["booked"], 1)
-        self.assertNotIn("Анна", json.dumps(response.json(), ensure_ascii=False))
+        self.assertNotIn("Анна Иванова", json.dumps(response.json(), ensure_ascii=False))
 
     def test_master_assistant_follow_up_keeps_requested_day(self):
         self.client.force_login(self.master_account())
@@ -233,6 +233,51 @@ class BeautyTests(TestCase):
             "doctor": self.other_master.pk, "username": "newmaster", "password": "Master-Password-93!"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(get_user_model().objects.get(username="newmaster").clinic_profile.role, "doctor")
+
+    def test_manager_assistant_is_private_and_uses_aggregate_facts(self):
+        client = self.patient()
+        self.client.force_login(client)
+        self.book()
+        page = reverse("clinic:manager_assistant_page")
+        endpoint = reverse("clinic:manager_assistant_api")
+        self.assertNotEqual(self.client.get(page).status_code, 200)
+        self.assertNotEqual(self.client.post(endpoint,
+            data=json.dumps({"question": "Сколько записей?", "date": self.day.isoformat()}),
+            content_type="application/json").status_code, 200)
+        manager = get_user_model().objects.create_user(
+            username="manager_ai", password="Manager-Password-93!", is_staff=True)
+        manager.user_permissions.add(Permission.objects.get(
+            content_type__app_label="clinic", codename="view_appointment"))
+        self.client.force_login(manager)
+        self.assertContains(self.client.get(page), "Помощник менеджера")
+        self.assertContains(self.client.get(reverse("admin:clinic_appointment_changelist")),
+                            "ИИ-помощник менеджера")
+        response = self.client.post(endpoint,
+            data=json.dumps({"question": "Сколько записей ждут подтверждения?",
+                             "date": self.day.isoformat()}), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["facts"]["pending_today"], 1)
+        self.assertEqual(response.json()["facts"]["pending_total"], 1)
+        self.assertNotIn("Анна Иванова", json.dumps(response.json(), ensure_ascii=False))
+
+    @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
+    @patch("clinic.services._gigachat_answer", return_value="Одна запись ожидает подтверждения.")
+    def test_manager_ai_sends_no_client_identity_to_provider(self, provider):
+        self.client.force_login(self.patient())
+        self.book()
+        manager = get_user_model().objects.create_user(
+            username="manager_ai", password="Manager-Password-93!", is_staff=True)
+        manager.user_permissions.add(Permission.objects.get(
+            content_type__app_label="clinic", codename="view_appointment"))
+        self.client.force_login(manager)
+        response = self.client.post(reverse("clinic:manager_assistant_api"),
+            data=json.dumps({"question": "Сколько записей во вторник? Клиент Анна +79001112233",
+                             "date": self.day.isoformat()}), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["mode"], "gigachat")
+        self.assertNotIn("Анна", provider.call_args.args[1])
+        self.assertNotIn("Анна Иванова", str(provider.call_args))
+        self.assertNotIn("+79001112233", str(provider.call_args))
 
     def test_csrf_protects_booking_and_private_messages(self):
         user = self.patient()

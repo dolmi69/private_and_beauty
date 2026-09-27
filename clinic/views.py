@@ -21,7 +21,8 @@ from django.views.decorators.http import require_GET, require_POST
 from .forms import AppointmentForm, ClientRegistrationForm, DoctorAccountForm
 from .models import Appointment, AppointmentSlot, Doctor, SalonService, UserProfile
 from .scheduling import available_on_day, available_slots
-from .services import mentioned_day, receptionist_reply, recommended_service, scrub_guest_message
+from .services import (manager_schedule_reply, mentioned_day, receptionist_reply,
+                       recommended_service, scrub_guest_message)
 
 
 @never_cache
@@ -303,6 +304,40 @@ def manager_dashboard(request):
     if not request.user.has_perm("clinic.view_appointment"):
         raise PermissionDenied
     return redirect("admin:clinic_appointment_changelist")
+
+
+@staff_member_required
+@never_cache
+def manager_assistant_page(request):
+    if not request.user.has_perm("clinic.view_appointment"):
+        raise PermissionDenied
+    return render(request, "clinic/manager_assistant.html", {
+        "today": timezone.localdate().isoformat()})
+
+
+@staff_member_required
+@never_cache
+@require_POST
+def manager_assistant_api(request):
+    if not request.user.has_perm("clinic.view_appointment"):
+        raise PermissionDenied
+    try:
+        payload = _payload(request)
+        question = payload.get("question")
+        if not isinstance(question, str) or not 1 <= len(question.strip()) <= 500:
+            raise ValueError("Введите вопрос длиной от 1 до 500 символов.")
+        selected_date = payload.get("date")
+        if selected_date is not None and not isinstance(selected_date, str):
+            raise ValueError("Выберите корректную дату.")
+        selected_day = date.fromisoformat(selected_date) if selected_date else None
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    if _rate_limited(request, "manager-assistant", 12):
+        return _too_many()
+    day = mentioned_day(question) or selected_day or timezone.localdate()
+    if day < timezone.localdate() - timedelta(days=365) or day > timezone.localdate() + timedelta(days=365):
+        return JsonResponse({"error": "Выберите дату в пределах одного года."}, status=400)
+    return JsonResponse(manager_schedule_reply(question.strip(), day))
 
 
 def csrf_failure(request, reason=""):

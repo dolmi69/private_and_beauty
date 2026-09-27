@@ -16,7 +16,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from .models import Appointment, AppointmentSlot
+from .models import Appointment, AppointmentSlot, Doctor
 
 logger = logging.getLogger(__name__)
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
@@ -322,4 +322,69 @@ def specialist_schedule_reply(question, specialist, day=None):
                                                max_tokens=160), "mode": "gigachat", "facts": facts}
         except (requests.RequestException, ValueError, KeyError, IndexError, TypeError, OSError) as exc:
             logger.warning("GigaChat schedule unavailable; using local answer (%s).", type(exc).__name__)
+    return {"reply": fallback, "mode": "local", "facts": facts}
+
+
+def manager_schedule_facts(day):
+    """Aggregate salon workload without exposing client identities to the model."""
+    starts = timezone.make_aware(datetime.combine(day, datetime.min.time()))
+    ends = starts + timedelta(days=1)
+    appointments = list(Appointment.objects.filter(
+        requested_at__gte=starts, requested_at__lt=ends, service__isnull=False,
+        status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
+    ).select_related("service", "doctor"))
+    by_service = {}
+    for item in appointments:
+        by_service[item.service.title] = by_service.get(item.service.title, 0) + 1
+    masters = []
+    for master in Doctor.objects.all():
+        calendar = schedule_facts(master, day)
+        masters.append({"name": master.full_name, "specialty": master.specialty,
+                        "booked": calendar["booked"], "capacity": calendar["capacity"],
+                        "free_count": len(calendar["free"]),
+                        "free_times": calendar["free"][:8], "last_end": calendar["last_end"]})
+    return {
+        "date": day.strftime("%d.%m.%Y"), "weekday": WEEKDAYS[day.weekday()],
+        "booked": len(appointments),
+        "pending_today": sum(item.status == Appointment.Status.PENDING for item in appointments),
+        "confirmed_today": sum(item.status == Appointment.Status.CONFIRMED for item in appointments),
+        "pending_total": Appointment.objects.filter(
+            service__isnull=False, status=Appointment.Status.PENDING).count(),
+        "by_service": by_service, "masters": masters,
+    }
+
+
+def manager_schedule_reply(question, day):
+    facts = manager_schedule_facts(day)
+    label = f"{facts['weekday'].capitalize()}, {facts['date']}"
+    lowered = question.casefold()
+    if any(word in lowered for word in ("найди", "найти", "телефон клиент", "номер клиент")):
+        return {"reply": "Конкретную запись клиента найдите через поиск в списке записей админки.",
+                "mode": "local", "facts": facts}
+    if any(word in lowered for word in ("ожида", "подтвержд", "неподтвержд")):
+        fallback = (f"{label}: ожидают подтверждения {facts['pending_today']} записей; "
+                    f"во всём календаре — {facts['pending_total']}.")
+        safe_question = "Сколько записей ждут подтверждения на выбранную дату и во всём календаре?"
+    elif any(word in lowered for word in ("свобод", "окн", "мест")):
+        available = [f"{item['name']} — {item['free_count']}"
+                     for item in facts["masters"] if item["free_count"]]
+        fallback = f"{label}: свободные часы по мастерам: {', '.join(available) or 'нет'}."
+        safe_question = "У каких мастеров есть свободные часы на выбранную дату?"
+    else:
+        fallback = (f"{label}: записей {facts['booked']}, подтверждено {facts['confirmed_today']}, "
+                    f"ждут подтверждения {facts['pending_today']}.")
+        safe_question = "Какова загрузка салона и мастеров на выбранную дату?"
+    if settings.GIGACHAT_CREDENTIALS and not settings.CHAT_FORCE_MOCK:
+        prompt = (
+            "Ты рабочий помощник менеджера салона красоты LAVIE. Пиши по-русски, коротко и "
+            "по делу. Отвечай только по агрегированному JSON расписания. Различай выбранный "
+            "день и все ожидающие подтверждения записи. Не придумывай клиентов, услуги, мастеров "
+            "или время. Если просят данные конкретного клиента, направь к поиску записей в админке: "
+            "персональных данных в твоём контексте нет. Расписание: "
+            + json.dumps(facts, ensure_ascii=False))
+        try:
+            answer = _gigachat_answer(prompt, safe_question, temperature=0.3, max_tokens=220)
+            return {"reply": answer, "mode": "gigachat", "facts": facts}
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError, OSError) as exc:
+            logger.warning("GigaChat manager assistant unavailable; using local answer (%s).", type(exc).__name__)
     return {"reply": fallback, "mode": "local", "facts": facts}

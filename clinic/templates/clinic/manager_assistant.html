@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+{% block title %}ИИ-помощник менеджера · LAVIE{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Управление</a> › <a href="{% url 'admin:clinic_appointment_changelist' %}">Записи</a> › ИИ-помощник</div>{% endblock %}
+{% block content %}
+<h1>Помощник менеджера</h1>
+<p>Спросите о загрузке салона, свободных часах мастеров или записях, ожидающих подтверждения.</p>
+<p>Имена и телефоны клиентов помощнику не передаются. Для поиска конкретной записи используйте <a href="{% url 'admin:clinic_appointment_changelist' %}">список записей</a>.</p>
+<form id="manager-assistant-form" style="max-width:680px; margin-top:24px">
+  {% csrf_token %}
+  <div class="form-row"><label for="manager-day">Дата</label><input type="date" id="manager-day" value="{{ today }}" required></div>
+  <div class="form-row"><label for="manager-question">Ваш вопрос</label><input type="text" id="manager-question" maxlength="500" placeholder="Сколько записей ждут подтверждения во вторник?" required style="width:100%; max-width:640px"></div>
+  <button class="button default" type="submit">Спросить</button>
+</form>
+<div id="manager-answer" role="status" aria-live="polite" style="max-width:680px; margin-top:20px; padding:16px; border:1px solid var(--hairline-color); border-radius:8px; display:none"></div>
+<script>
+(() => {
+  const form = document.getElementById('manager-assistant-form');
+  const answer = document.getElementById('manager-answer');
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    answer.style.display = 'block';
+    answer.textContent = 'Проверяю календарь…';
+    try {
+      const response = await fetch('{% url 'clinic:manager_assistant_api' %}', {
+        method: 'POST', credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value},
+        body: JSON.stringify({question: document.getElementById('manager-question').value.trim(), date: document.getElementById('manager-day').value})
+      });
+      const data = await response.json();
+      answer.textContent = response.ok ? data.reply : (data.error || 'Не получилось ответить.');
+    } catch (_) { answer.textContent = 'Нет соединения. Попробуйте ещё раз.'; }
+  });
+})();
+</script>
+{% endblock %}
