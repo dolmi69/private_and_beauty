@@ -1,0 +1,15 @@
+{% extends 'clinic/base.html' %}
+{% block title %}Кабинет врача · Эвервелл{% endblock %}
+{% block content %}<section class="section"><div class="container">
+  <div class="eyebrow">Личный кабинет врача</div><h1>{{ doctor.full_name }}</h1><p class="muted">{{ doctor.specialty }} · Расписание и загрузка на ближайшие 7 дней</p>
+  <div class="row g-3 mb-4"><div class="col-sm-4"><div class="p-4 bg-white border rounded-3"><strong class="fs-2">{{ workload.booked }} / {{ workload.capacity }}</strong><div>занято времён · {{ workload.percent }}%</div></div></div>
+    <div class="col-sm-4"><div class="p-4 bg-white border rounded-3"><strong class="fs-2">{{ workload.pending }}</strong><div>ожидают подтверждения</div></div></div>
+    <div class="col-sm-4"><div class="p-4 bg-white border rounded-3"><strong class="fs-2">{{ workload.confirmed }}</strong><div>подтверждены</div></div></div></div>
+  <h2>Загрузка по дням</h2><div class="table-responsive bg-white border rounded-3 mb-5"><table class="table mb-0"><thead><tr><th>День</th><th>Занято</th><th>Свободно</th><th>Загрузка</th></tr></thead><tbody>
+    {% for day in workload.days %}<tr><td>{{ day.date|date:"d.m, D" }}</td><td>{{ day.booked }} / {{ day.capacity }}</td><td>{{ day.free }}</td><td style="min-width:160px"><div class="progress" role="progressbar" aria-valuenow="{{ day.percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:{{ day.percent }}%;background:#638559"></div></div></td></tr>{% endfor %}
+  </tbody></table></div>
+  <h2>Предстоящие приёмы</h2><div class="table-responsive bg-white border rounded-3 mb-5"><table class="table mb-0"><thead><tr><th>Когда</th><th>Пациент</th><th>Статус</th></tr></thead><tbody>
+    {% for appointment in appointments %}<tr><td>{{ appointment.requested_at|date:"d.m.Y H:i" }}</td><td>{{ appointment.client_name }}</td><td>{{ appointment.get_status_display }}</td></tr>{% empty %}<tr><td colspan="3">Пока нет записей.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <h2>Рабочее время</h2><p class="muted">Ближайшие открытые часы настраивает менеджер.</p><div class="d-flex gap-2 flex-wrap">{% for slot in slots %}<span class="p-2 bg-white border rounded-3">{{ slot.starts_at|date:"d.m H:i" }}</span>{% empty %}Нет открытых часов.{% endfor %}</div>
+</div></section>{% endblock %}

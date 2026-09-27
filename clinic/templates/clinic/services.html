@@ -1,0 +1,14 @@
+{% extends 'clinic/base.html' %}
+{% block title %}Наши услуги · Клиника «Эвервелл»{% endblock %}
+{% block content %}
+<div class="container"><div class="page-intro"><div class="breadcrumb-line"><a href="{% url 'clinic:home' %}">Главная</a><span>/</span><span>Наши услуги</span></div><div class="eyebrow">От профилактики до помощи специалиста</div><h1>Ваше здоровье.<br>Заботимся вместе.</h1><p class="muted">От первого вопроса до приёма специалиста — познакомьтесь с направлениями помощи в клинике «Эвервелл».</p></div></div>
+<section class="section pt-4"><div class="container"><div class="care-grid">
+  <article class="care-card" id="primary"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></div><h3>Терапия</h3><p>Первое обращение с вопросами о самочувствии, профилактические осмотры и помощь в выборе дальнейших обследований.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+  <article class="care-card" id="specialists"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg></div><h3>Кардиология</h3><p>Консультации по вопросам здоровья сердца, артериального давления и дальнейшего наблюдения.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+  <article class="care-card" id="families"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-family"/></svg></div><h3>Педиатрия</h3><p>Приёмы для детей и родителей в спокойной обстановке, с вниманием к вашим вопросам.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+  <article class="care-card"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></div><h3>Стоматология</h3><p>Профилактические осмотры полости рта и консультации по вопросам здоровья зубов и дёсен.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+  <article class="care-card"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></div><h3>Дерматология</h3><p>Консультации по вопросам здоровья кожи, волос и ногтей с индивидуальным вниманием специалиста.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+  <article class="care-card"><div class="care-icon"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg></div><h3>Неврология</h3><p>Приёмы по поводу повторяющихся головных болей и других вопросов о работе нервной системы.</p><a class="text-link" href="{% url 'clinic:doctors' %}">Выбрать врача →</a></article>
+</div><p class="small-text muted mt-3">Описания услуг приведены для примера. Подробности приёма и стоимость уточняйте у администратора.</p></div></section>
+<section class="section pt-0"><div class="container">{% include 'clinic/help_band.html' %}</div></section>
+{% endblock %}

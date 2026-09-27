@@ -1,0 +1,14 @@
+{% extends 'clinic/base.html' %}
+{% block title %}Контакты · Клиника «Эвервелл»{% endblock %}
+{% block content %}
+<div class="container"><div class="page-intro"><div class="breadcrumb-line"><a href="{% url 'clinic:home' %}">Главная</a><span>/</span><span>Контакты</span></div><div class="eyebrow">Мы рядом, чтобы помочь</div><h1>Начнём с разговора.</h1><p class="muted">Свяжитесь с администратором или оставьте заявку на приём. Мы подскажем, что делать дальше.</p></div></div>
+<section class="section pt-4"><div class="container"><div class="contact-grid">
+  <article class="contact-card"><h2 style="font-size:30px">Будем рады встрече.</h2>
+    <div class="contact-row"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg><div><h3>Наша клиника</h3><p>ул. Ивовая, 24, Примерный город<br>Первый этаж · Вход без ступеней</p></div></div>
+    <div class="contact-row"><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg><div><h3>Позвонить администратору</h3><p><a href="tel:+70000000000">+7 (000) 000-00-00</a></p></div></div>
+    <div class="contact-row"><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg><div><h3>Написать нам</h3><p><a href="mailto:hello@everwell.example">hello@everwell.example</a></p></div></div>
+    <p class="small-text muted mb-0">Контакты указаны для примера. Перед публикацией замените их на реальные.</p>
+  </article>
+  <article class="contact-card" style="background:var(--sage)"><h2 style="font-size:30px">Найдите время для здоровья.</h2><p class="small-text muted">Часы работы · {{ clinic_timezone_label }}</p><table class="hours"><caption class="visually-hidden">Часы работы клиники</caption><tbody><tr><th scope="row">Понедельник — пятница</th><td>08:00 – 19:00</td></tr><tr><th scope="row">Суббота</th><td>09:00 – 14:00</td></tr><tr><th scope="row">Воскресенье</th><td>Выходной</td></tr></tbody></table><p class="small-text muted mt-4">Укажите удобное время — мы позвоним, чтобы согласовать приём. Онлайн-заявка не бронирует время автоматически.</p><button type="button" class="btn btn-forest mt-2" data-book>Оставить заявку <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></article>
+</div></div></section>
+{% endblock %}

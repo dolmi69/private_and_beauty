@@ -1,0 +1,12 @@
+{% extends 'clinic/base.html' %}
+{% block title %}Мои записи · Эвервелл{% endblock %}
+{% block content %}<section class="section"><div class="container">
+  <div class="eyebrow">Личный кабинет пациента</div><h1>Мои записи</h1>
+  <p class="muted">Здравствуйте, {{ request.user.first_name|default:request.user.username }}. Здесь видно время и статус ваших приёмов.</p>
+  <button class="btn btn-forest mb-4" type="button" data-book>Записаться к врачу</button>
+  {% for appointment in appointments %}<article class="p-4 bg-white border rounded-3 mb-3">
+    <div class="d-flex justify-content-between flex-wrap gap-2"><strong>{{ appointment.doctor.full_name }} · {{ appointment.doctor.specialty }}</strong><span>{{ appointment.get_status_display }}</span></div>
+    <div class="muted mt-2">{{ appointment.requested_at|date:"d.m.Y H:i" }} · {{ clinic_timezone_label }}</div>
+    {% if appointment.status == 'pending' %}<form method="post" action="{% url 'clinic:cancel_appointment' appointment.pk %}" class="mt-3">{% csrf_token %}<button type="submit" class="btn btn-outline">Отменить заявку</button></form>{% endif %}
+  </article>{% empty %}<div class="p-4 bg-white border rounded-3">У вас пока нет записей.</div>{% endfor %}
+</div></section>{% endblock %}
