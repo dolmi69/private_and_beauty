@@ -1,6 +1,7 @@
-"""Beauty concierge and an optional GigaChat-powered schedule assistant.
+"""GigaChat salon concierge and staff assistant, with local fallbacks.
 
-Only aggregate schedule facts reach GigaChat; client identities and messages stay local.
+Staff schedule questions are reduced to intents before they leave Django. Guest
+messages are scrubbed of phone numbers and email addresses before the API call.
 """
 import hashlib
 import json
@@ -48,13 +49,16 @@ def _access_token():
     return token
 
 
-def _gigachat_answer(system_prompt, question):
+def _gigachat_answer(system_prompt, question, *, history=(), temperature=0, max_tokens=180):
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend({"role": item["role"], "content": item["content"]}
+                    for item in history if item.get("role") in {"user", "assistant"}
+                    and isinstance(item.get("content"), str))
+    messages.append({"role": "user", "content": question})
     response = requests.post(f"{settings.GIGACHAT_BASE_URL}/chat/completions",
         headers={"Authorization": f"Bearer {_access_token()}", "Accept": "application/json"},
-        json={"model": settings.GIGACHAT_MODEL, "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question}],
-            "temperature": 0, "max_tokens": 180, "stream": False},
+        json={"model": settings.GIGACHAT_MODEL, "messages": messages,
+              "temperature": temperature, "max_tokens": max_tokens, "stream": False},
         timeout=(5, 15), verify=settings.GIGACHAT_CA_BUNDLE or True,
         allow_redirects=False)
     if response.status_code == 401:
@@ -72,22 +76,120 @@ SERVICE_HINTS = {
     "brows": ("бров", "ресниц", "ламинир"),
     "makeup": ("макияж", "визаж", "мейкап"),
 }
+EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+PHONE_RE = re.compile(r"(?<!\w)(?:\+?7|8)[\s().-]*(?:\d[\s().-]*){10}(?!\d)")
 
 
-def receptionist_reply(history, services):
-    """Recommend a real service and lead the guest to date-based booking."""
+def scrub_guest_message(message):
+    """Booking does not need contact details; keep them out of model context."""
+    return PHONE_RE.sub("[номер скрыт]", EMAIL_RE.sub("[адрес скрыт]", message))
+
+
+def recommended_service(history, services, previous_service_id=None):
     message = history[-1]["content"].casefold()
+    for phrase, title in (("без покрытия", "Маникюр без покрытия"),
+                          ("с покрытием", "Маникюр с покрытием"),
+                          ("гель-лак", "Маникюр с покрытием")):
+        if phrase in message:
+            match = next((item for item in services if item["title"] == title), None)
+            if match:
+                return match
     chosen = next((item for item in services if item["title"].casefold() in message), None)
-    if chosen is None:
-        category = next((key for key, words in SERVICE_HINTS.items()
-                         if any(word in message for word in words)), None)
-        chosen = next((item for item in services if item["category"] == category), None)
     if chosen:
-        reply = (f"Вам может подойти «{chosen['title']}». Выберите день — покажем мастеров "
-                 "и свободное время. Если хотите, расскажите о желаемом результате.")
-    else:
-        reply = "Подскажу с выбором. Что вам ближе: волосы, маникюр, брови и ресницы или макияж?"
-    return {"reply": reply, "recommended_service": chosen, "mode": "local"}
+        return chosen
+    category = next((key for key, words in SERVICE_HINTS.items()
+                     if any(word in message for word in words)), None)
+    if category:
+        return next((item for item in services if item["category"] == category), None)
+    for previous in reversed(history[:-1]):
+        if previous.get("role") == "assistant":
+            chosen = next((item for item in services
+                           if item["title"].casefold() in previous.get("content", "").casefold()), None)
+            if chosen:
+                return chosen
+    return next((item for item in services if item["id"] == previous_service_id), None)
+
+
+def _local_guest_answer(history, chosen, availability):
+    message = history[-1]["content"].casefold()
+    if chosen and any(word in message for word in ("стоим", "цен", "сколько стоит", "дорог")):
+        return (f"«{chosen['title']}» стоит {chosen['price']} ₽, длится "
+                f"{chosen['duration_minutes']} минут. Могу подсказать мастера и свободное время.")
+    if availability is not None:
+        masters = availability["masters"]
+        day_label = date.fromisoformat(availability["date"]).strftime("%d.%m.%Y")
+        requested_master = availability.get("requested_master")
+        selected = next((item for item in masters if item["name"] == requested_master), None)
+        if selected:
+            times = ", ".join(selected["times"][:8])
+            return (f"{day_label}, мастер {selected['name']}: свободно {times}. "
+                    "Выберите удобный час в форме записи.")
+        if masters and requested_master:
+            alternative = masters[0]
+            return (f"{day_label}, мастер {requested_master}: свободных часов нет. "
+                    f"Мастер {alternative['name']}: {', '.join(alternative['times'][:5])}.")
+        if masters:
+            options = "; ".join(f"{item['name']}: {', '.join(item['times'][:4])}"
+                                for item in masters[:3])
+            return f"На {day_label} есть свободное время: {options}. Выберите удобный час в форме записи."
+        return f"На {day_label} свободного времени пока нет. Попробуйте соседний день."
+    if chosen and any(word in message for word in ("длит", "долго", "сколько времени")):
+        return f"«{chosen['title']}» занимает {chosen['duration_minutes']} минут."
+    if any(word in message for word in ("работаете", "режим", "часы работы", "открыты")):
+        return "Салон работает с понедельника по субботу, запись доступна с 10:00 до 20:00."
+    if chosen:
+        variants = (
+            f"Для вашего запроса подойдёт «{chosen['title']}»: {chosen['description']} Стоимость {chosen['price']} ₽.",
+            f"Можно начать с услуги «{chosen['title']}». Её делают наши мастера: "
+            f"{', '.join(chosen['specialists'])}.",
+        )
+        return variants[len(history) % len(variants)]
+    return "Расскажите, какой результат хочется получить: маникюр, волосы, брови, ресницы или макияж?"
+
+
+def mentioned_day(message):
+    text = message.casefold()
+    if any(word in text for word in ("сегодня", "завтра", "послезавтра", *WEEKDAY_STEMS)) or re.search(r"\d{1,2}\.\d{1,2}", text):
+        return requested_schedule_date(message)
+    return None
+
+
+def receptionist_reply(history, services, availability=None, previous_service_id=None):
+    """Answer from the live salon catalogue; preserve conversational context."""
+    chosen = recommended_service(history, services, previous_service_id)
+    fallback = _local_guest_answer(history, chosen, availability)
+    # Availability is a hard fact. A language model may misread a list of free
+    # slots, so construct that answer from the booking database directly.
+    if availability is not None and not any(word in history[-1]["content"].casefold()
+                                            for word in ("стоим", "цен", "сколько стоит")):
+        return {"reply": fallback, "recommended_service": chosen, "mode": "verified"}
+    if settings.GIGACHAT_CREDENTIALS and not settings.CHAT_FORCE_MOCK:
+        catalogue = [{key: item[key] for key in
+                     ("title", "category", "description", "price", "duration_minutes", "specialists")}
+                     for item in services]
+        prompt = (
+            "Ты Лави, живой и тактичный консьерж салона красоты LAVIE. Пиши по-русски, "
+            "на 'вы', тепло и естественно, 1–3 короткими предложениями, без Markdown. "
+            "Отвечай именно на последний вопрос с учётом истории диалога. Не повторяй прежний "
+            "ответ и не предлагай снова выбрать день, если клиент уже назвал его. "
+            "Точные услуги, цены, длительность и мастеров бери только из JSON каталога. "
+            "У LAVIE один демонстрационный салон; не упоминай филиалы, адреса, акции, "
+            "скидки или способы связи, которых нет в данных. "
+            "Свободные часы называй только если они есть в JSON доступности. "
+            "Если данных нет, честно скажи об этом и предложи форму онлайн-записи. "
+            "Не обещай запись: её подтверждает менеджер. Не спрашивай телефон или диагноз, "
+            "не давай медицинских советов. При неясном запросе задай только один уместный вопрос. "
+            "Каталог: " + json.dumps(catalogue, ensure_ascii=False) +
+            " Услуга, обсуждаемая сейчас: " + json.dumps(chosen["title"] if chosen else None, ensure_ascii=False) +
+            " Доступность на запрошенную дату: " + json.dumps(availability, ensure_ascii=False)
+        )
+        try:
+            answer = _gigachat_answer(prompt, history[-1]["content"], history=history[-9:-1],
+                                      temperature=0.55, max_tokens=260)
+            return {"reply": answer, "recommended_service": chosen, "mode": "gigachat"}
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError, OSError) as exc:
+            logger.warning("GigaChat concierge unavailable; using local answer (%s).", type(exc).__name__)
+    return {"reply": fallback, "recommended_service": chosen, "mode": "local"}
 
 
 WEEKDAYS = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
@@ -135,19 +237,49 @@ def schedule_facts(specialist, day):
             for slot in slots if slot.starts_at not in booked]
     last_end = max((item.requested_at + timedelta(minutes=item.service.duration_minutes)
                     for item in appointments), default=None)
+    bookings = [{"start": timezone.localtime(item.requested_at).strftime("%H:%M"),
+                 "end": timezone.localtime(item.requested_at + timedelta(minutes=item.service.duration_minutes)).strftime("%H:%M"),
+                 "service": item.service.title, "status": item.status}
+                for item in appointments]
+    service_counts = {}
+    for item in appointments:
+        service_counts[item.service.title] = service_counts.get(item.service.title, 0) + 1
     return {
         "date": day.strftime("%d.%m.%Y"), "weekday": WEEKDAYS[day.weekday()],
         "capacity": len(slots), "booked": len(appointments), "free": free,
         "first_booking": timezone.localtime(appointments[0].requested_at).strftime("%H:%M") if appointments else None,
         "last_end": timezone.localtime(last_end).strftime("%H:%M") if last_end else None,
         "shift_end": timezone.localtime(slots[-1].starts_at + timedelta(minutes=60)).strftime("%H:%M") if slots else None,
+        "bookings": bookings, "service_counts": service_counts,
     }
+
+
+def mentioned_schedule_service(question, service_counts):
+    """Recognize common Russian inflections without forwarding the raw question."""
+    text = question.casefold()
+    for title in service_counts:
+        if title.casefold() in text:
+            return title
+    if "маник" in text:
+        if "без покры" in text:
+            return next((title for title in service_counts if "маникюр без покрытия" in title.casefold()), None)
+        if "покры" in text:
+            return next((title for title in service_counts if "маникюр с покрытием" in title.casefold()), None)
+    for stem in ("стриж", "уклад", "тонир", "педик", "бров", "ресниц", "макияж"):
+        if stem in text:
+            return next((title for title in service_counts if stem in title.casefold()), None)
+    return None
 
 
 def local_schedule_answer(question, facts):
     title = f"{facts['weekday'].capitalize()}, {facts['date']}"
     if not facts["capacity"]:
         return f"{title}: рабочих часов пока нет в календаре."
+    service = mentioned_schedule_service(question, facts["service_counts"])
+    if service:
+        count = facts["service_counts"][service]
+        times = ", ".join(item["start"] for item in facts["bookings"] if item["service"] == service)
+        return f"{title}: «{service}» — {count} записей, начало в {times}."
     if any(word in question.casefold() for word in ("освобожд", "заканч", "конец", "последн")):
         if facts["last_end"]:
             return (f"{title}: последний клиент заканчивает в {facts['last_end']}. "
@@ -159,8 +291,8 @@ def local_schedule_answer(question, facts):
             f"Последний заканчивает: {facts['last_end'] or 'нет'}. Свободно: {free}.")
 
 
-def specialist_schedule_reply(question, specialist):
-    day = requested_schedule_date(question)
+def specialist_schedule_reply(question, specialist, day=None):
+    day = day or requested_schedule_date(question)
     if day is None:
         return {"reply": "Не смогла распознать дату. Напишите, например: «Во сколько я освобождаюсь во вторник?»", "mode": "local"}
     facts = schedule_facts(specialist, day)
@@ -169,15 +301,25 @@ def specialist_schedule_reply(question, specialist):
         try:
             # The master's raw question may contain a client name or phone number.
             # Send only a normalized schedule intent and aggregate facts outside Django.
-            finish_intent = any(word in question.casefold() for word in
-                                ("освобожд", "заканч", "конец", "последн"))
-            safe_question = ("Когда заканчивается последний клиент и смена?" if finish_intent
-                             else "Сколько клиентов записано и какие часы свободны?")
-            prompt = ("Ты помощник мастера салона красоты. Отвечай по-русски кратко и только "
-                      "на основании JSON расписания ниже. Не придумывай записи, клиентов или время. "
+            lowered = question.casefold()
+            service = mentioned_schedule_service(question, facts["service_counts"])
+            if service:
+                safe_question = f"Сколько записей на услугу «{service}» и в какое время они начинаются?"
+            elif any(word in lowered for word in ("освобожд", "заканч", "конец", "последн")):
+                safe_question = "Когда заканчивается последний клиент и смена?"
+            elif any(word in lowered for word in ("свобод", "окн", "мест")):
+                safe_question = "Какие часы свободны для записи?"
+            else:
+                safe_question = "Какова загрузка, число клиентов и расписание на этот день?"
+            prompt = ("Ты персональный помощник мастера салона красоты LAVIE. Отвечай по-русски "
+                      "по существу, обычно одним-двумя предложениями, только на основании JSON расписания ниже. "
+                      "Различай окончание последней услуги и конец смены. "
+                      "Дата в JSON может быть будущей: не говори «сейчас» о будущих записях. "
+                      "Не придумывай записи, клиентов или время. Не повторяй шаблонную фразу. "
                       "Если вопрос за пределами расписания, так и скажи. Персональных данных нет. "
                       "Расписание: " + json.dumps(facts, ensure_ascii=False))
-            return {"reply": _gigachat_answer(prompt, safe_question), "mode": "gigachat", "facts": facts}
+            return {"reply": _gigachat_answer(prompt, safe_question, temperature=0.3,
+                                               max_tokens=160), "mode": "gigachat", "facts": facts}
         except (requests.RequestException, ValueError, KeyError, IndexError, TypeError, OSError) as exc:
             logger.warning("GigaChat schedule unavailable; using local answer (%s).", type(exc).__name__)
     return {"reply": fallback, "mode": "local", "facts": facts}

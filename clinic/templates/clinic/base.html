@@ -46,11 +46,11 @@
 
   <button class="concierge-toggle" id="concierge-toggle" type="button" aria-controls="concierge" aria-expanded="false"><span>✦</span> Помочь с выбором</button>
   <section class="concierge" id="concierge" aria-label="Помощник по услугам" hidden>
-    <div class="concierge-head"><div><small>НА СВЯЗИ С ВАМИ</small><strong>Beauty-консьерж</strong></div><button id="concierge-close" type="button" aria-label="Закрыть">×</button></div>
-    <div class="concierge-log" id="concierge-log" role="log" aria-live="polite"><div class="chat-bubble">Привет! Расскажите, что хочется сделать — помогу выбрать услугу и перейти к записи ✨</div></div>
+    <div class="concierge-head"><div><small>НА СВЯЗИ С ВАМИ</small><strong>Beauty-консьерж</strong></div><div><button id="concierge-reset" type="button" aria-label="Начать новый диалог" title="Начать новый диалог">↻</button><button id="concierge-close" type="button" aria-label="Закрыть">×</button></div></div>
+    <div class="concierge-log" id="concierge-log" role="log" aria-live="polite">{% for item in guest_chat_history %}<div class="chat-bubble{% if item.role == 'user' %} user{% endif %}">{{ item.content }}</div>{% empty %}<div class="chat-bubble">Привет! Расскажите, что хочется сделать — помогу выбрать услугу и перейти к записи ✨</div>{% endfor %}</div>
     <div class="concierge-suggestions"><button type="button" data-prompt="Хочу маникюр">Маникюр</button><button type="button" data-prompt="Хочу стрижку">Стрижка</button><button type="button" data-prompt="Хочу оформить брови">Брови</button></div>
     <form id="concierge-form" class="concierge-form">{% csrf_token %}<label class="visually-hidden" for="concierge-input">Ваш вопрос</label><input id="concierge-input" maxlength="1000" placeholder="Что вам хочется?" required><button type="submit" aria-label="Отправить">↗</button></form>
-    <p class="concierge-notice">Помощник подбирает услуги по описанию. Для записи выберите дату и мастера.</p>
+    <p class="concierge-notice">{% if guest_ai_enabled %}Ответы может обрабатывать GigaChat. Не отправляйте в чат телефон и другие личные данные.{% else %}Помощник подбирает услуги по описанию.{% endif %} Для записи выберите дату и мастера.</p>
   </section>
   <script src="{% static 'clinic/site.js' %}" defer></script>
   {% block scripts %}{% endblock %}

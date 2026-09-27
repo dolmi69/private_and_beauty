@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 
 from .models import Appointment, AppointmentSlot, ClientMessage, UserProfile
 from .scheduling import workload
-from .services import schedule_facts, specialist_schedule_reply
+from .services import mentioned_day, schedule_facts, specialist_schedule_reply
 
 
 def _master_profile(user):
@@ -125,5 +125,13 @@ def master_assistant(request):
             raise ValueError
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"error": "Введите вопрос до 500 символов."}, status=400)
-    result = specialist_schedule_reply(question.strip(), profile.doctor)
+    question = question.strip()
+    day = mentioned_day(question)
+    if day is None:
+        try:
+            day = date.fromisoformat(request.session.get("master_assistant_day", ""))
+        except ValueError:
+            day = timezone.localdate()
+    result = specialist_schedule_reply(question, profile.doctor, day=day)
+    request.session["master_assistant_day"] = day.isoformat()
     return JsonResponse(result)

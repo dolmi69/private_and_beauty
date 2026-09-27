@@ -21,7 +21,7 @@ from django.views.decorators.http import require_GET, require_POST
 from .forms import AppointmentForm, ClientRegistrationForm, DoctorAccountForm
 from .models import Appointment, AppointmentSlot, Doctor, SalonService, UserProfile
 from .scheduling import available_on_day, available_slots
-from .services import receptionist_reply
+from .services import mentioned_day, receptionist_reply, recommended_service, scrub_guest_message
 
 
 @never_cache
@@ -209,12 +209,36 @@ def chat(request):
         return _too_many()
 
     # Roles and previous messages come from the server session, never the caller.
-    history = request.session.get("clinic_chat", [])[-10:]
-    history.append({"role": "user", "content": message.strip()})
-    directory = list(SalonService.objects.filter(is_active=True).values("id", "title", "category"))
-    result = receptionist_reply(history, directory)
+    history = [{"role": item["role"], "content": scrub_guest_message(item["content"])}
+               for item in request.session.get("clinic_chat", [])[-10:]
+               if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
+               and isinstance(item.get("content"), str)]
+    history.append({"role": "user", "content": scrub_guest_message(message.strip())})
+    directory = [{"id": service.pk, "title": service.title, "category": service.category,
+                  "description": service.description, "price": service.price,
+                  "duration_minutes": service.duration_minutes,
+                  "specialists": [master.full_name for master in service.specialists.all()]}
+                 for service in SalonService.objects.filter(is_active=True).prefetch_related("specialists")]
+    previous_service_id = request.session.get("clinic_chat_service_id")
+    chosen_day = mentioned_day(message)
+    availability = None
+    if chosen_day and timezone.localdate() <= chosen_day <= timezone.localdate() + timedelta(days=60):
+        # Only free slots are shared with the model; client records never leave the DB.
+        chosen = recommended_service(history, directory, previous_service_id)
+        if chosen:
+            service = SalonService.objects.get(pk=chosen["id"])
+            message_lower = message.casefold()
+            requested_master = next((name for name in chosen["specialists"]
+                                     if any(part.casefold()[:4] in message_lower for part in name.split())), None)
+            availability = {"date": chosen_day.isoformat(), "masters": [
+                {"name": master.full_name,
+                 "times": [timezone.localtime(slot.starts_at).strftime("%H:%M") for slot in slots]}
+                for master, slots in available_on_day(service, chosen_day)],
+                "requested_master": requested_master}
+    result = receptionist_reply(history, directory, availability, previous_service_id)
     history.append({"role": "assistant", "content": result["reply"]})
     request.session["clinic_chat"] = history[-12:]
+    request.session["clinic_chat_service_id"] = (result["recommended_service"] or {}).get("id")
     request.session.set_expiry(1800)
     return JsonResponse(result)
 
@@ -223,6 +247,7 @@ def chat(request):
 @require_POST
 def reset_chat(request):
     request.session.pop("clinic_chat", None)
+    request.session.pop("clinic_chat_service_id", None)
     return JsonResponse({"ok": True})
 
 

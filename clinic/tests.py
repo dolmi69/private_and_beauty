@@ -2,6 +2,7 @@
 import json
 from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
+import requests
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -75,6 +76,50 @@ class BeautyTests(TestCase):
         self.assertEqual(self.client.get(reverse("clinic:availability_api"), {
             "service": self.service.pk, "date": "2020-01-01"}).status_code, 400)
 
+    @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
+    @patch("clinic.services._gigachat_answer", side_effect=[
+        "Конечно, помогу подобрать!",
+        "Эта услуга стоит 2500 ₽ и занимает час.",
+    ])
+    def test_guest_ai_uses_catalogue_history_and_hides_phone(self, provider):
+        first = self.client.post(reverse("clinic:chat"),
+            data=json.dumps({"message": "Хочу маникюр с покрытием"}), content_type="application/json")
+        second = self.client.post(reverse("clinic:chat"),
+            data=json.dumps({"message": "Сколько стоит? Мой номер +79001112233"}),
+            content_type="application/json")
+        self.assertEqual(first.json()["mode"], "gigachat")
+        self.assertEqual(second.json()["reply"], "Эта услуга стоит 2500 ₽ и занимает час.")
+        self.assertEqual(second.json()["recommended_service"]["id"], self.service.pk)
+        self.assertIn("2500", provider.call_args.args[0])
+        self.assertIn("Конечно, помогу", str(provider.call_args.kwargs["history"]))
+        self.assertNotIn("+79001112233", str(provider.call_args))
+        self.assertNotIn("+79001112233", str(self.client.session["clinic_chat"]))
+
+    @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
+    @patch("clinic.services._gigachat_answer", side_effect=requests.RequestException("offline"))
+    def test_guest_ai_outage_has_specific_local_answer(self, provider):
+        response = self.client.post(reverse("clinic:chat"),
+            data=json.dumps({"message": "Сколько стоит маникюр с покрытием?"}),
+            content_type="application/json")
+        self.assertEqual(response.json()["mode"], "local")
+        self.assertIn("2500 ₽", response.json()["reply"])
+
+    @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
+    @patch("clinic.services._gigachat_answer", return_value="Помогу с маникюром.")
+    def test_guest_ai_receives_real_availability_and_can_reset(self, provider):
+        first = self.client.post(reverse("clinic:chat"),
+            data=json.dumps({"message": "Хочу маникюр с покрытием"}), content_type="application/json")
+        self.assertEqual(first.json()["mode"], "gigachat")
+        second = self.client.post(reverse("clinic:chat"),
+            data=json.dumps({"message": f"Есть время {self.day:%d.%m.%Y} у Софии?"}),
+            content_type="application/json")
+        self.assertEqual(second.json()["mode"], "verified")
+        self.assertIn("11:00", second.json()["reply"])
+        self.assertIn(self.master.full_name, second.json()["reply"])
+        self.assertEqual(provider.call_count, 1)
+        self.assertEqual(self.client.post(reverse("clinic:reset_chat")).status_code, 200)
+        self.assertNotIn("clinic_chat_service_id", self.client.session)
+
     def test_booking_checks_login_service_master_and_unique_time(self):
         self.assertEqual(self.book().status_code, 401)
         user = self.patient()
@@ -136,6 +181,20 @@ class BeautyTests(TestCase):
         self.assertEqual(response.json()["facts"]["booked"], 1)
         self.assertNotIn("Анна", json.dumps(response.json(), ensure_ascii=False))
 
+    def test_master_assistant_follow_up_keeps_requested_day(self):
+        self.client.force_login(self.master_account())
+        endpoint = reverse("clinic:master_assistant")
+        first = self.client.post(endpoint,
+            data=json.dumps({"question": f"Какова загрузка {self.day:%d.%m.%Y}?"}),
+            content_type="application/json")
+        follow_up = self.client.post(endpoint,
+            data=json.dumps({"question": "А какие свободные часы?"}),
+            content_type="application/json")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(follow_up.status_code, 200)
+        self.assertEqual(follow_up.json()["facts"]["date"], self.day.strftime("%d.%m.%Y"))
+        self.assertIn("11:00", follow_up.json()["reply"])
+
     @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
     @patch("clinic.services._gigachat_answer", return_value="Последний клиент до 12:00.")
     def test_external_assistant_gets_no_client_identity(self, provider):
@@ -149,6 +208,17 @@ class BeautyTests(TestCase):
         self.assertNotIn("+7900", provider.call_args.args[0])
         self.assertNotIn("Анна", provider.call_args.args[1])
         self.assertNotIn("+7900", provider.call_args.args[1])
+
+    @override_settings(GIGACHAT_CREDENTIALS="fake", CHAT_FORCE_MOCK=False)
+    @patch("clinic.services._gigachat_answer", return_value="Один маникюр с покрытием в 11:00.")
+    def test_master_ai_understands_inflected_service_name(self, provider):
+        self.client.force_login(self.patient())
+        self.book()
+        result = specialist_schedule_reply(
+            f"Сколько маникюров с покрытием {self.day:%d.%m.%Y}?", self.master)
+        self.assertEqual(result["mode"], "gigachat")
+        self.assertIn("Маникюр с покрытием", provider.call_args.args[1])
+        self.assertEqual(result["facts"]["service_counts"]["Маникюр с покрытием"], 1)
 
     def test_master_workspace_and_manager_access_are_separate(self):
         master = self.master_account()

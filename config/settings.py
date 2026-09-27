@@ -94,11 +94,14 @@ BOOKING_RATE_LIMIT = 5
 CHAT_FORCE_MOCK = os.getenv("CHAT_FORCE_MOCK", "false").lower() == "true"
 GIGACHAT_CREDENTIALS = os.getenv("GIGACHAT_CREDENTIALS", "")
 GIGACHAT_SCOPE = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
-GIGACHAT_MODEL = os.getenv("GIGACHAT_MODEL", "GigaChat")
+GIGACHAT_MODEL = os.getenv("GIGACHAT_MODEL", "GigaChat-2")
 GIGACHAT_BASE_URL = os.getenv("GIGACHAT_BASE_URL", "https://api.giga.chat/v1").rstrip("/")
 if not GIGACHAT_BASE_URL.startswith("https://"):
     raise ImproperlyConfigured("GIGACHAT_BASE_URL must use HTTPS.")
-GIGACHAT_CA_BUNDLE = os.getenv("GIGACHAT_CA_BUNDLE", "")
+_salon_ca_file = BASE_DIR / "certs" / "russian_trusted_root_ca_pem.crt"
+GIGACHAT_CA_BUNDLE = os.getenv("GIGACHAT_CA_BUNDLE") or (
+    str(_salon_ca_file) if _salon_ca_file.is_file() else ""
+)
 
 # Telegram uses the same templates and database as the website.
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

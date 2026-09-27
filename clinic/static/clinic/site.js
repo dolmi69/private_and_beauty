@@ -4,6 +4,7 @@
   if (!widget) return;
   const toggle = document.getElementById("concierge-toggle");
   const close = document.getElementById("concierge-close");
+  const reset = document.getElementById("concierge-reset");
   const log = document.getElementById("concierge-log");
   const form = document.getElementById("concierge-form");
   const input = document.getElementById("concierge-input");
@@ -17,6 +18,18 @@
   }
   toggle.addEventListener("click", () => setOpen(widget.hidden));
   close.addEventListener("click", () => setOpen(false));
+  reset.addEventListener("click", async () => {
+    if (busy) return;
+    try {
+      const response = await fetch("/api/chat/reset/", {
+        method: "POST", credentials: "same-origin", headers: {"X-CSRFToken": csrf}
+      });
+      if (!response.ok) throw new Error("Не удалось начать новый диалог.");
+      log.replaceChildren();
+      bubble("Начнём заново. Какая услуга вас интересует?");
+      input.focus();
+    } catch (error) { bubble(error.message); }
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !widget.hidden) setOpen(false);
   });
