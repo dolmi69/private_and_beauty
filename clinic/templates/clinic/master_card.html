@@ -1,0 +1,5 @@
+<article class="master-card"><div class="master-portrait" aria-hidden="true"><span>{{ master.initials }}</span></div>
+  <div class="master-card-info"><div class="category-label">{{ master.specialty }}</div><h3>{{ master.full_name }}</h3><p>{{ master.description }}</p>
+    <div class="card-bottom"><span>Опыт {{ master.experience }} лет</span><a href="{% url 'clinic:booking' %}?master={{ master.pk }}" aria-label="Выбрать запись к {{ master.full_name }}">↗</a></div>
+  </div>
+</article>

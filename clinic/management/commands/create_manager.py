@@ -1,4 +1,4 @@
-"""Create a staff account with only the permissions needed by a receptionist."""
+"""Create a manager with salon booking, team and service permissions."""
 from getpass import getpass
 
 from django.contrib.auth import get_user_model
@@ -11,7 +11,7 @@ from clinic.models import UserProfile
 
 
 class Command(BaseCommand):
-    help = "Создать администратора клиники с ограниченными правами и запросом пароля."
+    help = "Создать менеджера салона с запросом пароля."
 
     def add_arguments(self, parser):
         parser.add_argument("username")
@@ -34,11 +34,13 @@ class Command(BaseCommand):
         user.set_password(password)
         user.save()
         UserProfile.objects.create(user=user, role=UserProfile.Role.MANAGER)
-        group, _ = Group.objects.get_or_create(name="Администраторы клиники")
+        group, _ = Group.objects.get_or_create(name="Менеджеры салона")
         group.permissions.set(Permission.objects.filter(
             content_type__app_label="clinic",
             codename__in=["view_appointment", "change_appointment", "view_doctor",
-                         "view_appointmentslot", "add_appointmentslot", "change_appointmentslot"],
+                "view_appointmentslot", "add_appointmentslot", "change_appointmentslot",
+                "view_salonservice", "add_salonservice", "change_salonservice",
+                "add_doctor", "change_doctor", "view_clientmessage"],
         ))
         user.groups.add(group)
         self.stdout.write(self.style.SUCCESS(f"Администратор «{username}» создан. Вход: /admin/."))

@@ -20,13 +20,13 @@ class Command(BaseCommand):
             url = mini_app_url()
             if options["configure"]:
                 api("setMyCommands", {"commands": [
-                    {"command": "start", "description": "Открыть клинику"},
-                    {"command": "clinic", "description": "Услуги, врачи и запись"},
+                    {"command": "start", "description": "Открыть LAVIE"},
+                    {"command": "salon", "description": "Услуги, мастера и запись"},
                     {"command": "help", "description": "Помощь"},
                 ]})
                 if url:
                     api("setChatMenuButton", {"menu_button": {
-                        "type": "web_app", "text": "Клиника", "web_app": {"url": url},
+                        "type": "web_app", "text": "LAVIE", "web_app": {"url": url},
                     }})
                 self.stdout.write("Команды настроены." if not url else "Команды и кнопка приложения настроены.")
             if options["check"]:

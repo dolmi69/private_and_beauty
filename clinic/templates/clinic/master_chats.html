@@ -1,0 +1,5 @@
+{% extends 'clinic/master_base.html' %}
+{% block title %}Чаты с клиентами · LAVIE{% endblock %}
+{% block content %}<div class="eyebrow">НА СВЯЗИ</div><h1>Чаты с клиентами.</h1><p class="muted">Переписки по вашим записям. Сообщения видны только вам и соответствующему клиенту.</p>
+<div class="mt-4">{% for item in appointments %}<a class="chat-list-item" href="{% url 'clinic:conversation' item.pk %}"><div><strong>{{ item.client_name }} · {{ item.service.title }}</strong><span>{{ item.requested_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}</span></div><span aria-hidden="true">Открыть ↗</span></a>{% empty %}<div class="panel">Пока нет записей и чатов с клиентами.</div>{% endfor %}</div>
+{% endblock %}

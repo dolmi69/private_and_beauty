@@ -1,11 +1,11 @@
 {% extends 'clinic/base.html' %}
-{% block title %}Команда · Эвервелл{% endblock %}
+{% block title %}Команда · LAVIE{% endblock %}
 {% block content %}<section class="section"><div class="container" style="max-width:800px">
-  <div class="eyebrow">Кабинет менеджера</div><h1>Аккаунты врачей</h1>
-  <p><a class="btn btn-outline" href="{% url 'clinic:manager_dashboard' %}">Все записи</a> <a class="btn btn-outline" href="{% url 'admin:clinic_appointmentslot_changelist' %}">Время приёма</a></p>
-  {% if created %}<div class="alert alert-success">Аккаунт врача создан. Передайте логин и временный пароль лично врачу.</div>{% endif %}
-  <form method="post" class="p-4 bg-white border rounded-3 mb-4">{% csrf_token %}<h2>Добавить вход врачу</h2>
+  <div class="eyebrow">КАБИНЕТ МЕНЕДЖЕРА</div><h1>Аккаунты мастеров</h1>
+  <p><a class="button button-outline" href="{% url 'clinic:manager_dashboard' %}">Все записи</a> <a class="button button-outline" href="{% url 'admin:clinic_appointmentslot_changelist' %}">Часы записи</a> <a class="button button-outline" href="{% url 'admin:clinic_salonservice_changelist' %}">Услуги</a></p>
+  {% if created %}<div class="alert alert-success">Аккаунт мастера создан. Передайте логин и временный пароль лично.</div>{% endif %}
+  <form method="post" class="panel mb-4">{% csrf_token %}<h2>Добавить мастера</h2>
     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}</div>{% endfor %}
-    <button class="btn btn-forest" type="submit">Создать аккаунт</button>
-  </form><h2>Врачи с доступом</h2>{% for profile in accounts %}<div class="p-3 bg-white border rounded-3 mb-2">{{ profile.doctor.full_name }} · логин {{ profile.user.username }}</div>{% empty %}<p>Аккаунты пока не созданы.</p>{% endfor %}
+    <button class="button button-dark" type="submit">Создать аккаунт ↗</button>
+  </form><h2>Мастера с доступом</h2>{% for profile in accounts %}<div class="p-3 bg-white border mb-2">{{ profile.doctor.full_name }} · логин {{ profile.user.username }}</div>{% empty %}<p>Аккаунты пока не созданы.</p>{% endfor %}
 </div></section>{% endblock %}

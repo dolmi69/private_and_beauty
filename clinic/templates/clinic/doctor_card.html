@@ -1,5 +1,0 @@
-{% load clinic_extras %}
-<article class="doctor-card">
-  <div class="doctor-visual"><div class="doctor-initials" aria-hidden="true">{{ doctor.initials }}</div><span class="experience">Стаж: {{ doctor.experience }} {{ doctor.experience|ru_years }}</span></div>
-  <div class="doctor-body"><h3>{{ doctor.full_name }}</h3><div class="specialty">{{ doctor.specialty }}</div><p>{{ doctor.description }}</p><button class="btn btn-outline" type="button" data-book data-doctor="{{ doctor.pk }}" aria-label="Записаться: {{ doctor.full_name }}">Записаться <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button></div>
-</article>

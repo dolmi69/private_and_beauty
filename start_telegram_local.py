@@ -55,14 +55,14 @@ try:
     env["TELEGRAM_PREVIEW_SECRET"] = secrets.token_urlsafe(48)
     env["TELEGRAM_MINI_APP_URL"] = url
     server = launch([sys.executable, "manage.py", "runserver", "127.0.0.1:8002",
-                     "--noreload", "--settings=config.telegram_preview"], "preview")
+                     "--noreload", "--insecure", "--settings=config.telegram_preview"], "preview")
     time.sleep(2)
     if server.poll() is not None:
         raise RuntimeError("Server did not start. Check port 8002 and .artifacts/preview.log")
     subprocess.run([sys.executable, "manage.py", "run_telegram_bot", "--configure", "--check"],
                    cwd=ROOT, env=env, check=True)
     bot = launch([sys.executable, "manage.py", "run_telegram_bot"], "bot")
-    print("Open https://t.me/hospitalpobot and press Start / Clinic.")
+    print("Open https://t.me/hospitalpobot and press Start / LAVIE.")
     print("Temporary URL:", url)
     print("Keep this window open. Ctrl+C stops the demo. Admin remains local only.")
     while all(child.poll() is None for child in children):

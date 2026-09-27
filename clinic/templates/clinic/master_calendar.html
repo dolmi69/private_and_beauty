@@ -1,0 +1,30 @@
+{% extends 'clinic/master_base.html' %}
+{% block title %}Календарь · LAVIE{% endblock %}
+{% block content %}<div class="eyebrow">ВАШЕ РАСПИСАНИЕ</div><h1>Календарь мастера.</h1><p class="muted">{{ master.full_name }} · {{ master.specialty }}. Выберите дату, чтобы увидеть клиентов и свободное время.</p>
+<div class="stat-grid"><div class="stat-box"><strong>{{ workload.booked }} / {{ workload.capacity }}</strong><span>занято на 7 дней</span></div><div class="stat-box"><strong>{{ workload.percent }}%</strong><span>загрузка на 7 дней</span></div><div class="stat-box"><strong>{{ workload.pending }}</strong><span>ждут подтверждения</span></div></div>
+<section class="assistant-card" aria-labelledby="assistant-title"><div class="eyebrow">ВАШ ПОМОЩНИК</div><h2 id="assistant-title" class="mt-2">Спросите о расписании ✦</h2><p class="muted">Например: «Во сколько я освобождаюсь во вторник?» или «Сколько свободных окон завтра?»</p>
+  <form id="schedule-form">{% csrf_token %}<label class="visually-hidden" for="schedule-question">Вопрос о расписании</label><input id="schedule-question" maxlength="500" placeholder="Во сколько я освобождаюсь во вторник?" required><button class="button button-dark" type="submit">Спросить ↗</button></form><div id="schedule-answer" class="assistant-answer" role="status" hidden></div>
+</section>
+<section class="calendar-wrap" aria-label="Календарь загрузки"><div class="calendar-nav"><a href="?date={{ previous_month|date:'Y-m-d' }}" aria-label="Предыдущий месяц">←</a><h2>{{ selected|date:"F Y" }}</h2><a href="?date={{ next_month|date:'Y-m-d' }}" aria-label="Следующий месяц">→</a></div>
+  <div class="calendar-grid"><div class="weekday">Пн</div><div class="weekday">Вт</div><div class="weekday">Ср</div><div class="weekday">Чт</div><div class="weekday">Пт</div><div class="weekday">Сб</div><div class="weekday">Вс</div>
+    {% for week in weeks %}{% for day in week %}<a class="day-cell{% if not day.in_month %} outside{% endif %}{% if day.selected %} selected{% endif %}" href="?date={{ day.date|date:'Y-m-d' }}" {% if day.selected %}aria-current="date"{% endif %}>
+      <span class="day-number">{{ day.date.day }}</span><span class="day-count">{{ day.booked }} / {{ day.capacity }} клиентов</span><span class="load-track"><i style="width:{{ day.percent }}%"></i></span>
+    </a>{% endfor %}{% endfor %}
+  </div>
+</section>
+<section class="day-list"><div class="eyebrow">ДЕТАЛИ ДНЯ</div><h2>{{ selected|date:"j E Y" }}</h2><p class="muted">Записей: {{ selected_facts.booked }} из {{ selected_facts.capacity }} возможных. {% if selected_facts.shift_end %}Смена до {{ selected_facts.shift_end }}.{% else %}Рабочих часов нет.{% endif %}</p>
+  {% if selected_facts.free %}<div class="free-times"><strong>Свободные окна:</strong>{% for hour in selected_facts.free %}<span>{{ hour }}</span>{% endfor %}</div>{% endif %}
+  <div class="table-responsive"><table class="schedule-table"><thead><tr><th>Время</th><th>Клиент</th><th>Услуга</th><th>Статус</th><th>Чат</th></tr></thead><tbody>
+  {% for item in appointments %}<tr><td>{{ item.requested_at|date:"H:i" }}</td><td>{{ item.client_name }}</td><td>{{ item.service.title }}</td><td>{{ item.get_status_display }}</td><td><a class="text-link" href="{% url 'clinic:conversation' item.pk %}">Открыть ↗</a></td></tr>{% empty %}<tr><td colspan="5">В этот день клиентов пока нет.</td></tr>{% endfor %}
+</tbody></table></div></section>
+<script>
+(() => { const form=document.getElementById('schedule-form'), answer=document.getElementById('schedule-answer');
+  form.addEventListener('submit',async event=>{event.preventDefault();answer.hidden=false;answer.textContent='Смотрю календарь…';
+    const question=document.getElementById('schedule-question').value.trim();
+    try {const response=await fetch('{% url 'clinic:master_assistant' %}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':form.querySelector('[name=csrfmiddlewaretoken]').value},body:JSON.stringify({question})});
+      const data=await response.json(); answer.textContent=response.ok?data.reply:(data.error||'Не получилось ответить.');
+    } catch(_) {answer.textContent='Нет соединения. Попробуйте ещё раз.';}
+  });
+})();
+</script>
+{% endblock %}

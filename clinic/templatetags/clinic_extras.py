@@ -1,4 +1,4 @@
-"""Русские формы слов для карточек врачей."""
+"""Русские формы слов для карточек мастеров."""
 from django import template
 
 register = template.Library()

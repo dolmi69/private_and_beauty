@@ -1,9 +1,9 @@
-"""Available slots and capacity calculations use clinic local time."""
+"""Availability and workload calculations in the salon's local time zone."""
 from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
-from .models import Appointment, AppointmentSlot
+from .models import Appointment, AppointmentSlot, Doctor, SalonService
 
 
 def available_slots(doctor_id):
@@ -14,17 +14,28 @@ def available_slots(doctor_id):
             .order_by("starts_at"))
 
 
-def seed_demo_slots(days=21):
-    """Create weekday 09:00–17:00 hourly slots; safe to run repeatedly."""
-    from .models import Doctor
+def available_on_day(service, day):
+    """Only specialists who perform the service and have room on that date."""
+    specialists = Doctor.objects.filter(services=service).distinct().order_by("full_name")
+    result = []
+    for specialist in specialists:
+        slots = [slot for slot in available_slots(specialist.pk)
+                 if timezone.localtime(slot.starts_at).date() == day]
+        if slots:
+            result.append((specialist, slots))
+    return result
+
+
+def seed_demo_slots(days=30):
+    """Create 10:00–19:00 hourly slots, Monday–Saturday; safe to repeat."""
     today = timezone.localdate()
     created = 0
     for offset in range(1, days + 1):
         day = today + timedelta(days=offset)
-        if day.weekday() >= 5:
+        if day.weekday() == 6:
             continue
         for doctor in Doctor.objects.all():
-            for hour in range(9, 17):
+            for hour in range(10, 20):
                 starts_at = timezone.make_aware(datetime.combine(day, time(hour)))
                 _, was_created = AppointmentSlot.objects.get_or_create(doctor=doctor, starts_at=starts_at)
                 created += int(was_created)
@@ -36,7 +47,8 @@ def workload(doctor):
     start = timezone.make_aware(datetime.combine(today, time.min))
     end = start + timedelta(days=7)
     slots = list(AppointmentSlot.objects.filter(doctor=doctor, is_active=True, starts_at__gte=start, starts_at__lt=end))
-    occupied = list(Appointment.objects.filter(doctor=doctor, status__in=["pending", "confirmed"], requested_at__gte=start, requested_at__lt=end))
+    occupied = list(Appointment.objects.filter(doctor=doctor, service__isnull=False,
+        status__in=["pending", "confirmed"], requested_at__gte=start, requested_at__lt=end))
     capacity = len(slots)
     count = len(occupied)
     days = []

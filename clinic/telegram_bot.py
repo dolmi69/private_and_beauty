@@ -46,17 +46,17 @@ def handle_update(update):
     if chat.get("type") != "private" or not isinstance(message.get("text"), str):
         return
     command = message["text"].split()[0].split("@")[0] if message["text"].strip() else ""
-    if command not in {"/start", "/help", "/clinic"}:
+    if command not in {"/start", "/help", "/clinic", "/salon"}:
         return
     url = mini_app_url()
     payload = {"chat_id": chat["id"], "text": (
-        "Здравствуйте! Это клиника «Эвервелл». Откройте приложение: там наши услуги, врачи, "
-        "контакты, помощник и запись на приём. Заявку подтвердит администратор."
-        if url else "Здравствуйте! Бот клиники «Эвервелл» подключён. Приложение готовится к запуску: "
-        "администратору нужно подключить публичный HTTPS-адрес."
+        "Привет! Это LAVIE beauty atelier. Откройте приложение: там услуги, мастера, "
+        "свободные часы, чаты и запись онлайн."
+        if url else "Привет! Бот LAVIE готовится к запуску. "
+        "Для приложения нужен публичный HTTPS-адрес."
     )}
     if url:
         payload["reply_markup"] = {"inline_keyboard": [[{
-            "text": "Открыть клинику", "web_app": {"url": url},
+            "text": "Открыть LAVIE", "web_app": {"url": url},
         }]]}
     api("sendMessage", payload)

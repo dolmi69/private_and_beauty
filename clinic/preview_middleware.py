@@ -4,9 +4,10 @@ from django.http import HttpResponseNotFound
 
 class VisitorOnlyMiddleware:
     allowed_paths = {
-        "/", "/services/", "/doctors/", "/contacts/",
+        "/", "/services/", "/masters/", "/doctors/", "/contacts/", "/booking/",
         "/api/chat/", "/api/chat/reset/", "/api/appointments/",
-        "/register/", "/login/", "/logout/", "/cabinet/",
+        "/api/availability/", "/register/", "/login/", "/logout/", "/cabinet/",
+        "/specialist/", "/specialist/chats/", "/specialist/assistant/",
     }
 
     def __init__(self, get_response):
@@ -17,7 +18,9 @@ class VisitorOnlyMiddleware:
             request.path_info.startswith("/api/doctors/") and request.path_info.endswith("/slots/")
         ) and not (
             request.path_info.startswith("/cabinet/appointments/") and request.path_info.endswith("/cancel/")
-        ):
+        ) and not (
+            request.path_info.startswith("/chats/") and request.path_info.endswith("/")
+        ) and not request.path_info.startswith("/static/clinic/"):
             return HttpResponseNotFound("Страница недоступна.")
         response = self.get_response(request)
         # Telegram Web embeds the visitor app in an iframe.

@@ -36,7 +36,7 @@ class ClientRegistrationForm(UserCreationForm):
 
 
 class DoctorAccountForm(forms.Form):
-    doctor = forms.ModelChoiceField(queryset=Doctor.objects.all(), label="Врач",
+    doctor = forms.ModelChoiceField(queryset=Doctor.objects.all(), label="Мастер",
                                     widget=forms.Select(attrs={"class": "form-select"}))
     username = forms.CharField(label="Логин", max_length=150,
                                widget=forms.TextInput(attrs={"class": "form-control"}))
@@ -46,7 +46,7 @@ class DoctorAccountForm(forms.Form):
     def clean_doctor(self):
         doctor = self.cleaned_data["doctor"]
         if UserProfile.objects.filter(doctor=doctor).exists():
-            raise forms.ValidationError("Для этого врача аккаунт уже создан.")
+            raise forms.ValidationError("Для этого мастера аккаунт уже создан.")
         return doctor
 
     def clean_username(self):

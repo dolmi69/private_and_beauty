@@ -2,6 +2,7 @@
 import hashlib
 import json
 import time
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
@@ -18,33 +19,68 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from .forms import AppointmentForm, ClientRegistrationForm, DoctorAccountForm
-from .models import Appointment, AppointmentSlot, Doctor, UserProfile
-from .scheduling import available_slots, workload
+from .models import Appointment, AppointmentSlot, Doctor, SalonService, UserProfile
+from .scheduling import available_on_day, available_slots
 from .services import receptionist_reply
 
 
 @never_cache
 @require_GET
 def home(request):
-    return render(request, "clinic/home.html", {"featured_doctors": Doctor.objects.all()[:3]})
+    catalogue = list(SalonService.objects.filter(is_active=True))
+    highlights = [next((item for item in catalogue if item.category == category), None)
+                  for category in ("nails", "hair", "brows")]
+    return render(request, "clinic/home.html", {
+        "featured_masters": Doctor.objects.all()[:3],
+        "featured_services": [item for item in highlights if item],
+    })
 
 
 @never_cache
 @require_GET
 def services(request):
-    return render(request, "clinic/services.html")
+    return render(request, "clinic/services.html", {"services": SalonService.objects.filter(is_active=True)})
 
 
 @never_cache
 @require_GET
 def doctors(request):
-    return render(request, "clinic/doctors.html", {"doctors": Doctor.objects.all()})
+    return render(request, "clinic/doctors.html", {"masters": Doctor.objects.all()})
 
 
 @never_cache
 @require_GET
 def contacts(request):
     return render(request, "clinic/contacts.html")
+
+
+@never_cache
+@require_GET
+def booking(request):
+    return render(request, "clinic/booking.html", {
+        "services": SalonService.objects.filter(is_active=True),
+        "selected_service": request.GET.get("service", ""),
+        "selected_master": request.GET.get("master", ""),
+        "minimum_date": timezone.localdate().isoformat(),
+        "maximum_date": (timezone.localdate() + timedelta(days=60)).isoformat(),
+    })
+
+
+@never_cache
+@require_GET
+def availability_api(request):
+    try:
+        service = SalonService.objects.get(pk=int(request.GET.get("service", "")), is_active=True)
+        day = date.fromisoformat(request.GET.get("date", ""))
+        if not timezone.localdate() <= day <= timezone.localdate() + timedelta(days=60):
+            raise ValueError
+    except (ValueError, TypeError, SalonService.DoesNotExist):
+        return JsonResponse({"error": "Выберите услугу и дату в ближайшие 60 дней."}, status=400)
+    masters = [{"id": master.pk, "name": master.full_name, "specialty": master.specialty,
+                "slots": [{"id": slot.pk, "time": timezone.localtime(slot.starts_at).strftime("%H:%M")}
+                          for slot in slots]}
+               for master, slots in available_on_day(service, day)]
+    return JsonResponse({"service": service.title, "date": day.isoformat(), "masters": masters})
 
 
 def account_role(user):
@@ -74,17 +110,9 @@ def dashboard(request):
     if role == UserProfile.Role.MANAGER:
         return redirect("clinic:manager_dashboard")
     if role == UserProfile.Role.DOCTOR:
-        profile = get_object_or_404(UserProfile, user=request.user, role=UserProfile.Role.DOCTOR)
-        if not profile.doctor_id:
-            raise PermissionDenied
-        appointments = Appointment.objects.filter(doctor=profile.doctor, requested_at__gte=timezone.now(),
-                                                  status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED])
-        slots = available_slots(profile.doctor_id)[:40]
-        return render(request, "clinic/doctor_dashboard.html", {
-            "doctor": profile.doctor, "appointments": appointments.order_by("requested_at")[:40],
-            "slots": slots, "workload": workload(profile.doctor),
-        })
-    appointments = Appointment.objects.filter(client=request.user).select_related("doctor").order_by("-requested_at")
+        return redirect("clinic:master_calendar")
+    appointments = (Appointment.objects.filter(client=request.user, service__isnull=False)
+                    .select_related("doctor", "service").order_by("-requested_at"))
     return render(request, "clinic/client_dashboard.html", {"appointments": appointments})
 
 
@@ -168,6 +196,8 @@ def _too_many():
 @never_cache
 @require_POST
 def chat(request):
+    if request.user.is_authenticated and account_role(request.user) == UserProfile.Role.DOCTOR:
+        return JsonResponse({"error": "Чат гостей недоступен мастеру."}, status=403)
     try:
         payload = _payload(request)
         message = payload.get("message")
@@ -181,7 +211,7 @@ def chat(request):
     # Roles and previous messages come from the server session, never the caller.
     history = request.session.get("clinic_chat", [])[-10:]
     history.append({"role": "user", "content": message.strip()})
-    directory = list(Doctor.objects.values("id", "full_name", "specialty"))
+    directory = list(SalonService.objects.filter(is_active=True).values("id", "title", "category"))
     result = receptionist_reply(history, directory)
     history.append({"role": "assistant", "content": result["reply"]})
     request.session["clinic_chat"] = history[-12:]
@@ -202,23 +232,25 @@ def book_appointment(request):
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Для записи войдите или зарегистрируйтесь.", "login_url": "/login/"}, status=401)
     if account_role(request.user) != UserProfile.Role.CLIENT:
-        return JsonResponse({"error": "Запись доступна только пациентам."}, status=403)
+        return JsonResponse({"error": "Запись доступна только клиентам."}, status=403)
     try:
         payload = _payload(request)
-        fields = ["doctor", "slot"]
+        fields = ["service", "doctor", "slot"]
         if any(not isinstance(payload.get(key), (str, int)) or isinstance(payload.get(key), bool) for key in fields):
-            raise ValueError("Заполните все поля заявки на приём.")
+            raise ValueError("Заполните все поля записи.")
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     if _rate_limited(request, "booking", settings.BOOKING_RATE_LIMIT):
         return _too_many()
     try:
+        service = SalonService.objects.get(pk=int(payload["service"]), is_active=True,
+                                           specialists__pk=int(payload["doctor"]))
         slot = available_slots(int(payload["doctor"])).get(pk=int(payload["slot"]))
-    except (ValueError, TypeError, AppointmentSlot.DoesNotExist):
-        return JsonResponse({"error": "Это время уже недоступно. Выберите другое."}, status=400)
+    except (ValueError, TypeError, AppointmentSlot.DoesNotExist, SalonService.DoesNotExist):
+        return JsonResponse({"error": "Услуга, мастер или время уже недоступны. Выберите другие."}, status=400)
     profile = UserProfile.objects.filter(user=request.user).first()
     if not profile or not profile.phone_number:
-        return JsonResponse({"error": "Добавьте телефон в профиле пациента."}, status=400)
+        return JsonResponse({"error": "Добавьте телефон в профиле клиента."}, status=400)
     form = AppointmentForm({"client_name": request.user.get_full_name() or request.user.username,
                             "phone_number": profile.phone_number, "doctor": slot.doctor_id,
                             "requested_at": timezone.localtime(slot.starts_at).strftime("%Y-%m-%dT%H:%M")})
@@ -227,6 +259,7 @@ def book_appointment(request):
     appointment = form.save(commit=False)
     appointment.client = request.user
     appointment.slot = slot
+    appointment.service = service
     appointment.requested_at = slot.starts_at
     try:
         with transaction.atomic():
@@ -236,7 +269,7 @@ def book_appointment(request):
     return JsonResponse({
         "id": appointment.pk,
         "status": appointment.status,
-        "message": "Время зарезервировано. Заявка ожидает подтверждения менеджера.",
+        "message": f"Запись на «{service.title}» к мастеру {slot.doctor.full_name} создана. Менеджер подтвердит её.",
     }, status=201)
 
 

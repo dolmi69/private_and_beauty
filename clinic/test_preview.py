@@ -9,12 +9,12 @@ class PreviewTests(SimpleTestCase):
         def forbidden(request):
             self.fail("Protected route reached application")
         middleware = VisitorOnlyMiddleware(forbidden)
-        for path in ["/admin/", "/admin/login/", "/manager/dashboard/", "/manager/team/", "/db.sqlite3"]:
+        for path in ["/admin/", "/admin/login/", "/manager/dashboard/", "/manager/team/", "/db.sqlite3", "/beauty.sqlite3"]:
             self.assertEqual(middleware(RequestFactory().get(path)).status_code, 404)
 
     def test_visitor_page_allows_telegram_embedding(self):
         def visitor(request):
-            response = HttpResponse("Клиника")
+            response = HttpResponse("LAVIE")
             response["X-Frame-Options"] = "DENY"
             return response
         response = VisitorOnlyMiddleware(visitor)(RequestFactory().get("/"))
@@ -24,5 +24,5 @@ class PreviewTests(SimpleTestCase):
 
     def test_account_pages_are_available_in_preview(self):
         middleware = VisitorOnlyMiddleware(lambda request: HttpResponse("ok"))
-        for path in ("/register/", "/login/", "/cabinet/", "/api/doctors/1/slots/"):
+        for path in ("/register/", "/login/", "/booking/", "/api/availability/", "/specialist/", "/chats/1/", "/static/clinic/beauty.css"):
             self.assertEqual(middleware(RequestFactory().get(path)).status_code, 200)

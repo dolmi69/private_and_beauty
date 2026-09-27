@@ -33,6 +33,6 @@ echo "Проверяю базу данных..."
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py seed_slots
 
-echo "Открываю русскую версию клиники..."
+echo "Открываю LAVIE — салон красоты..."
 (sleep 2 && open "http://127.0.0.1:8001/") &
 .venv/bin/python manage.py runserver 127.0.0.1:8001

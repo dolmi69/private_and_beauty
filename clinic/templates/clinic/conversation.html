@@ -1,0 +1,12 @@
+{% extends layout %}
+{% block title %}Чат по записи · LAVIE{% endblock %}
+{% block content %}<section class="section"><div class="container chat-page">
+  <div class="eyebrow">ЧАТ ПО ЗАПИСИ №{{ appointment.pk }}</div><h1 style="font-size:clamp(36px,4vw,54px)">{% if is_master %}{{ appointment.client_name }}{% else %}{{ appointment.doctor.full_name }}{% endif %}</h1>
+  <p class="muted">{{ appointment.service.title }} · {{ appointment.requested_at|date:"d.m.Y H:i" }} · {{ appointment.get_status_display }}</p>
+  <div class="chat-thread" role="log" aria-label="Сообщения"><div class="message"><small>LAVIE</small><p>Здесь можно уточнить детали предстоящего визита. Сообщения видны только вам двоим.</p></div>
+    {% for item in chat_messages %}<div class="message{% if item.sender_id == request.user.pk %} mine{% endif %}"><small>{{ item.sender.get_full_name|default:item.sender.username }} · {{ item.created_at|date:"d.m H:i" }}</small><p>{{ item.body }}</p></div>{% endfor %}
+  </div>
+  {% if error %}<div class="booking-error" role="alert">{{ error }}</div>{% endif %}
+  {% if appointment.status != 'cancelled' %}<form method="post" class="chat-compose-full">{% csrf_token %}<label class="visually-hidden" for="chat-body">Сообщение</label><textarea id="chat-body" name="body" maxlength="2000" placeholder="Напишите сообщение…" required></textarea><button type="submit" class="button button-dark">Отправить ↗</button></form>{% else %}<p class="muted mt-3">Чат закрыт после отмены записи.</p>{% endif %}
+  <a class="text-link mt-4" href="{% if is_master %}{% url 'clinic:master_chats' %}{% else %}{% url 'clinic:dashboard' %}{% endif %}">← Назад</a>
+</div></section>{% endblock %}

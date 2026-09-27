@@ -1,0 +1,12 @@
+{% load static %}
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fff9f8">
+<link rel="icon" type="image/svg+xml" href="{% static 'clinic/favicon.svg' %}">
+<title>{% block title %}Кабинет мастера · LAVIE{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"><link rel="stylesheet" href="{% static 'clinic/beauty.css' %}"></head>
+<body class="master-body"><div class="master-shell"><aside class="master-side">
+  <a class="brand" href="{% url 'clinic:master_calendar' %}"><span class="brand-flower">✳</span><span><strong>LAVIE</strong><small>кабинет мастера</small></span></a>
+  <nav aria-label="Кабинет мастера"><a href="{% url 'clinic:master_calendar' %}" {% if request.resolver_match.url_name == 'master_calendar' %}class="active"{% endif %}>▦ &nbsp; Календарь</a><a href="{% url 'clinic:master_chats' %}" {% if request.resolver_match.url_name == 'master_chats' or request.resolver_match.url_name == 'conversation' %}class="active"{% endif %}>♡ &nbsp; Чаты с клиентами</a></nav>
+  <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Выйти из кабинета ↗</button></form>
+</aside><main class="master-main"><div class="master-top"><small>ЛИЧНОЕ ПРОСТРАНСТВО · LAVIE</small><strong>{{ request.user.get_full_name|default:request.user.username }}</strong></div>{% block content %}{% endblock %}</main></div></body></html>

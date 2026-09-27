@@ -1,7 +1,4 @@
 {% extends 'clinic/base.html' %}
-{% block title %}Наши врачи · Клиника «Эвервелл»{% endblock %}
-{% block content %}
-<div class="container"><div class="page-intro"><div class="breadcrumb-line"><a href="{% url 'clinic:home' %}">Главная</a><span>/</span><span>Наши врачи</span></div><div class="eyebrow">Опыт и внимание к человеку</div><h1>Те, кто заботится<br>о вашем здоровье.</h1><p class="muted">Нас объединяет простая мысль: хорошая помощь начинается со знакомства с человеком. Выберите врача и оставьте заявку на приём.</p></div></div>
-<section class="section pt-4"><div class="container"><div class="doctor-grid">{% for doctor in doctors %}{% include 'clinic/doctor_card.html' %}{% empty %}<p>Список врачей обновляется. Чтобы записаться, обратитесь к администратору.</p>{% endfor %}</div><p class="small-text muted mt-3">В демоверсии представлены вымышленные врачи. Время каждого приёма подтверждает администратор.</p></div></section>
-<section class="section pt-0"><div class="container">{% include 'clinic/help_band.html' %}</div></section>
-{% endblock %}
+{% block title %}Мастера · LAVIE{% endblock %}
+{% block content %}<section class="page-hero"><div class="container"><div class="eyebrow">ЛЮДИ LAVIE</div><h1>Ваш мастер найдётся.</h1><p>Знакомьтесь с командой и выбирайте специалиста по настроению. При записи покажем, кто свободен в нужный день.</p></div></section>
+<section class="section"><div class="container"><div class="master-grid">{% for master in masters %}{% include 'clinic/master_card.html' %}{% endfor %}</div></div></section>{% endblock %}
