@@ -142,10 +142,13 @@ class BeautyTests(TestCase):
         client = self.patient()
         self.client.force_login(client)
         self.book()
-        result = specialist_schedule_reply(f"Когда освобождаюсь {self.day:%d.%m.%Y}?", self.master)
+        result = specialist_schedule_reply(
+            f"Когда освобождаюсь {self.day:%d.%m.%Y} после Анны +79001112233?", self.master)
         self.assertEqual(result["mode"], "gigachat")
         self.assertNotIn("Анна", provider.call_args.args[0])
         self.assertNotIn("+7900", provider.call_args.args[0])
+        self.assertNotIn("Анна", provider.call_args.args[1])
+        self.assertNotIn("+7900", provider.call_args.args[1])
 
     def test_master_workspace_and_manager_access_are_separate(self):
         master = self.master_account()

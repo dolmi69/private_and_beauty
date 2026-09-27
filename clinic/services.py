@@ -167,11 +167,17 @@ def specialist_schedule_reply(question, specialist):
     fallback = local_schedule_answer(question, facts)
     if settings.GIGACHAT_CREDENTIALS and not settings.CHAT_FORCE_MOCK:
         try:
+            # The master's raw question may contain a client name or phone number.
+            # Send only a normalized schedule intent and aggregate facts outside Django.
+            finish_intent = any(word in question.casefold() for word in
+                                ("освобожд", "заканч", "конец", "последн"))
+            safe_question = ("Когда заканчивается последний клиент и смена?" if finish_intent
+                             else "Сколько клиентов записано и какие часы свободны?")
             prompt = ("Ты помощник мастера салона красоты. Отвечай по-русски кратко и только "
                       "на основании JSON расписания ниже. Не придумывай записи, клиентов или время. "
                       "Если вопрос за пределами расписания, так и скажи. Персональных данных нет. "
                       "Расписание: " + json.dumps(facts, ensure_ascii=False))
-            return {"reply": _gigachat_answer(prompt, question), "mode": "gigachat", "facts": facts}
+            return {"reply": _gigachat_answer(prompt, safe_question), "mode": "gigachat", "facts": facts}
         except (requests.RequestException, ValueError, KeyError, IndexError, TypeError, OSError) as exc:
             logger.warning("GigaChat schedule unavailable; using local answer (%s).", type(exc).__name__)
     return {"reply": fallback, "mode": "local", "facts": facts}
